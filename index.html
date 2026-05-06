@@ -3,17 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scenic Driver - Pro</title>
+    <title>Scenic Driver - Hardware Integration Pro</title>
     <style>
         body { margin: 0; overflow: hidden; background: #a3e4ff; font-family: 'Segoe UI', sans-serif; user-select: none; touch-action: none; }
         #ui {
             position: absolute; top: 5%; left: 5%; color: white;
             background: rgba(0,0,0,0.7); padding: 15px 25px; border-radius: 12px;
             border-left: 6px solid #ffdd00; z-index: 100;
-        }
-        #cam-ui {
-            position: absolute; top: 5%; right: 5%; z-index: 100;
-            display: flex; flex-direction: column; align-items: center;
         }
         #restart-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -24,23 +20,6 @@
             padding: 15px 40px; font-size: 20px; background: #2ecc71;
             border: none; color: white; border-radius: 30px; cursor: pointer; margin-top: 20px;
         }
-        .controls {
-            position: absolute; bottom: 8%; width: 100%;
-            display: flex; justify-content: space-between; padding: 0 5%;
-            box-sizing: border-box; z-index: 100;
-        }
-        .btn-group { display: flex; gap: 20px; align-items: flex-end; }
-        .btn {
-            width: 80px; height: 80px; background: rgba(255,255,255,0.15);
-            border: 2px solid rgba(255,255,255,0.8); border-radius: 50%;
-            color: white; display: flex; align-items: center; justify-content: center;
-            font-size: 24px; font-weight: bold; cursor: pointer; transition: 0.2s;
-        }
-        .btn:active { background: rgba(255,255,255,0.4); transform: scale(0.95); }
-        .pedal { width: 110px; height: 70px; border-radius: 15px; font-size: 16px; }
-        #gas { background: rgba(46, 204, 113, 0.4); border-color: #2ecc71; }
-        #brake { background: rgba(231, 76, 60, 0.4); border-color: #e74c3c; }
-        #camBtn { width: 60px; height: 60px; background: rgba(0,0,0,0.6); border-color: #aaa; }
     </style>
 </head>
 <body>
@@ -48,22 +27,12 @@
     <div id="ui">
         <div style="font-size: 12px; letter-spacing: 2px; opacity: 0.8; margin-bottom: 5px;">TOUR DISTANCE</div>
         <div id="score" style="font-size: 28px; font-weight: bold;">0 m</div>
-    </div>
-
-    <div id="cam-ui">
-        <div class="btn" id="camBtn">🎥</div>
-        <div style="color: white; text-align: center; font-size: 12px; margin-top: 8px; font-weight: bold; text-shadow: 1px 1px 2px black;">CAM (C)</div>
+        <div id="status" style="font-size: 12px; color: #ffdd00; margin-top: 5px;">WAITING FOR JOYSTICK...</div>
     </div>
 
     <div id="restart-screen">
         <h1 style="font-size: 48px; margin-bottom: 10px; color: #e74c3c;">CRASHED!</h1>
-        <div id="final-score" style="font-size: 24px; margin-bottom: 20px;"></div>
         <button class="restart-btn" onclick="location.reload()">RESTART TOUR</button>
-    </div>
-
-    <div class="controls">
-        <div class="btn-group"><div class="btn" id="leftBtn">◀</div><div class="btn" id="rightBtn">▶</div></div>
-        <div class="btn-group"><div class="btn pedal" id="brake">BRAKE</div><div class="btn pedal" id="gas">GAS</div></div>
     </div>
 
     <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
@@ -71,41 +40,28 @@
     <script type="module">
         import * as THREE from 'three';
 
+        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xa3e4ff);
         scene.fog = new THREE.Fog(0xa3e4ff, 70, 250);
 
         const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // Initial setup for smooth camera transitions
-        let currentLookTarget = new THREE.Vector3(0, 2, -15);
         camera.position.set(0, 8, 20);
-        camera.lookAt(currentLookTarget);
+        camera.lookAt(0, 2, -15);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
-
-        // Handle window resizing
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
         dirLight.position.set(10, 20, 10);
         scene.add(dirLight);
 
-        // Environment Map
+        // --- WORLD OBJECTS ---
         const road = new THREE.Mesh(new THREE.PlaneGeometry(22, 2000), new THREE.MeshPhongMaterial({ color: 0x3d3d3d }));
         road.rotation.x = -Math.PI / 2;
         scene.add(road);
-
-        const grass = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshPhongMaterial({ color: 0x4caf50 }));
-        grass.rotation.x = -Math.PI / 2; grass.position.y = -0.1;
-        scene.add(grass);
 
         const laneLines = [];
         for(let i = 0; i < 40; i++) {
@@ -116,81 +72,31 @@
             });
         }
 
-        const trees = [];
-        for(let i=0; i<40; i++) {
-            const tree = new THREE.Group();
-            tree.add(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 3), new THREE.MeshPhongMaterial({color: 0x3e2723})));
-            const leaves = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 8), new THREE.MeshPhongMaterial({color: 0x2e7d32}));
-            leaves.position.y = 3.5;
-            tree.add(leaves);
-            tree.position.set(Math.random() > 0.5 ? 20 + Math.random()*10 : -20 - Math.random()*10, 1.5, -i * 25);
-            scene.add(tree); trees.push(tree);
-        }
-
-        function createCar(color, isPlayer = false) {
+        // --- PLAYER CAR ---
+        function createCar(color) {
             const car = new THREE.Group();
             const body = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1, 5), new THREE.MeshPhongMaterial({color}));
             body.position.y = 0.8;
             const glass = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 2.5), new THREE.MeshPhongMaterial({color: 0x1a1a1a}));
             glass.position.set(0, 1.6, -0.2);
             
-            car.userData.tyres = [];
-            const tyreGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
-            const tyreMat = new THREE.MeshPhongMaterial({color: 0x333333});
-            [[-1.3, 0.5, 1.5], [1.3, 0.5, 1.5], [-1.3, 0.5, -1.5], [1.3, 0.5, -1.5]].forEach(pos => {
-                const tyre = new THREE.Mesh(tyreGeo, tyreMat);
-                tyre.rotation.z = Math.PI / 2; tyre.position.set(...pos);
-                car.add(tyre); car.userData.tyres.push(tyre);
-            });
-
-            // Lights & Dashboard (Player Only)
-            if (isPlayer) {
-                const lightGeo = new THREE.BoxGeometry(0.6, 0.3, 0.1);
-                const brakeMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
-                const leftBrake = new THREE.Mesh(lightGeo, brakeMat);
-                const rightBrake = new THREE.Mesh(lightGeo, brakeMat);
-                leftBrake.position.set(-0.8, 0.8, 2.5);
-                rightBrake.position.set(0.8, 0.8, 2.5);
-                car.add(leftBrake, rightBrake);
-                car.userData.brakeLights = [leftBrake, rightBrake];
-
-                const indicatorGeo = new THREE.BoxGeometry(0.4, 0.2, 0.1);
-                const leftInd = new THREE.Mesh(indicatorGeo, new THREE.MeshBasicMaterial({color: 0xffaa00}));
-                const rightInd = new THREE.Mesh(indicatorGeo, new THREE.MeshBasicMaterial({color: 0xffaa00}));
-                leftInd.position.set(-1.1, 0.8, 2.5);
-                rightInd.position.set(1.1, 0.8, 2.5);
-                leftInd.visible = rightInd.visible = false;
-                car.add(leftInd, rightInd);
-                car.userData.indicators = { left: leftInd, right: rightInd };
-
-                // Interior Dashboard & Steering Wheel
-                const dashGroup = new THREE.Group();
-                dashGroup.position.set(0, 1.3, -1.2);
-
-                const dashboard = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.5, 0.8), new THREE.MeshPhongMaterial({color: 0x222222}));
-                dashGroup.add(dashboard);
-
-                const dashLeftInd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.05), new THREE.MeshBasicMaterial({color: 0x00ff00}));
-                dashLeftInd.position.set(-0.3, 0.3, 0.35);
-                dashLeftInd.visible = false;
-                
-                const dashRightInd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.05), new THREE.MeshBasicMaterial({color: 0x00ff00}));
-                dashRightInd.position.set(0.3, 0.3, 0.35);
-                dashRightInd.visible = false;
-                
-                dashGroup.add(dashLeftInd, dashRightInd);
-                car.userData.dashIndicators = { left: dashLeftInd, right: dashRightInd };
-
-                car.add(dashGroup);
-            }
+            const lightGeo = new THREE.BoxGeometry(0.6, 0.3, 0.1);
+            const brakeMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
+            const leftB = new THREE.Mesh(lightGeo, brakeMat);
+            const rightB = new THREE.Mesh(lightGeo, brakeMat);
+            leftB.position.set(-0.8, 0.8, 2.5);
+            rightB.position.set(0.8, 0.8, 2.5);
+            car.add(leftB, rightB);
+            car.userData.brakeLights = [leftB, rightB];
 
             car.add(body, glass);
             return car;
         }
 
-        const player = createCar(0xd32f2f, true);
+        const player = createCar(0xd32f2f);
         scene.add(player);
 
+        // --- NPC SYSTEM ---
         const npcs = [];
         for(let i=0; i<5; i++) {
             const npc = createCar(Math.random() * 0xffffff);
@@ -198,219 +104,75 @@
             scene.add(npc); npcs.push(npc);
         }
 
-        let speed = 0, distance = 0;
-        let isCrashed = false, crashedNPC = null;
-        let pVelocity = new THREE.Vector3(), pAngularVel = new THREE.Vector3();
-        let npcVelocity = new THREE.Vector3(), npcAngularVel = new THREE.Vector3();
-        const activeKeys = new Set();
+        // --- GAME LOGIC ---
+        let speed = 0, distance = 0, isCrashed = false;
 
-        // --- Camera System Variables ---
-        const cameraPresets = [
-            { pos: new THREE.Vector3(0, 8, 20), look: new THREE.Vector3(0, 2, -15) },   // Third Person (Default)
-            { pos: new THREE.Vector3(0, 1.8, -0.3), look: new THREE.Vector3(0, 1.6, -20) }, // First Person / Dash
-            { pos: new THREE.Vector3(0, 30, 5), look: new THREE.Vector3(0, 0, -10) },   // Top Down / Bird's Eye
-            { pos: new THREE.Vector3(0, 3, 25), look: new THREE.Vector3(0, 2, -10) }    // Low Angle Cinematic
-        ];
-        let camIndex = 0;
-        let isDragging = false;
-        let dragOffX = 0, dragOffY = 0;
-        let mouseX = 0, mouseY = 0;
+        function updateJoystick() {
+            const gamepads = navigator.getGamepads();
+            const gp = gamepads[0];
 
-        // Camera Cycle Event
-        const cycleCamera = () => {
-            camIndex = (camIndex + 1) % cameraPresets.length;
-            dragOffX = 0; dragOffY = 0; // Reset look offsets on cycle
-        };
-        document.getElementById('camBtn').onclick = cycleCamera;
+            if (gp && !isCrashed) {
+                document.getElementById('status').innerText = "HARDWARE CONNECTED";
+                
+                // 1. STEERING (Axis 0: Range -1 to 1)
+                let steerValue = gp.axes[0];
+                if (Math.abs(steerValue) > 0.05) {
+                    player.position.x += steerValue * 0.3;
+                    player.rotation.y = -steerValue * 0.4;
+                } else {
+                    player.rotation.y *= 0.8;
+                }
 
-        // Mouse/Touch Drag Handlers for Camera Look Around
-        const handleDragStart = (x, y, target) => {
-            if(target.closest && (target.closest('.btn') || target.closest('#ui'))) return;
-            isDragging = true; mouseX = x; mouseY = y;
-        };
-        const handleDragMove = (x, y) => {
-            if(isDragging) {
-                dragOffX += (x - mouseX) * 0.01;
-                dragOffY += (y - mouseY) * 0.01;
-                dragOffY = Math.max(-1.5, Math.min(1.5, dragOffY)); // Clamp vertical look
-                mouseX = x; mouseY = y;
+                // 2. ACCELERATOR (Axis 1: -1 is gas, 1 is brake/neutral)
+                let pedalInput = gp.axes[1];
+                if (pedalInput < -0.1) {
+                    speed += 0.005 * Math.abs(pedalInput);
+                    player.userData.brakeLights.forEach(l => l.material.color.setHex(0x550000));
+                } else if (pedalInput > 0.1) {
+                    speed -= 0.02 * pedalInput;
+                    player.userData.brakeLights.forEach(l => l.material.color.setHex(0xff0000));
+                } else {
+                    speed -= 0.001;
+                    player.userData.brakeLights.forEach(l => l.material.color.setHex(0x550000));
+                }
             }
-        };
+        }
 
-        // Mouse Events
-        window.addEventListener('mousedown', (e) => handleDragStart(e.clientX, e.clientY, e.target));
-        window.addEventListener('mousemove', (e) => handleDragMove(e.clientX, e.clientY));
-        window.addEventListener('mouseup', () => isDragging = false);
-        window.addEventListener('mouseleave', () => isDragging = false);
-
-        // Touch Events
-        window.addEventListener('touchstart', (e) => handleDragStart(e.touches[0].clientX, e.touches[0].clientY, e.target), {passive: false});
-        window.addEventListener('touchmove', (e) => handleDragMove(e.touches[0].clientX, e.touches[0].clientY), {passive: false});
-        window.addEventListener('touchend', () => isDragging = false);
-
-        // Input Controls
-        const inputHandler = (id, key) => {
-            const el = document.getElementById(id);
-            el.onmousedown = el.ontouchstart = (e) => { e.preventDefault(); activeKeys.add(key); };
-            el.onmouseup = el.ontouchend = (e) => { e.preventDefault(); activeKeys.delete(key); };
-        };
-        inputHandler('gas', 'w'); inputHandler('brake', 's'); inputHandler('leftBtn', 'a'); inputHandler('rightBtn', 'd');
-        
-        window.addEventListener('keydown', (e) => {
-            const key = e.key.toLowerCase();
-            activeKeys.add(key);
-            if (key === 'c') cycleCamera();
-        });
-        window.addEventListener('keyup', (e) => activeKeys.delete(e.key.toLowerCase()));
-
-        // --- Main Game Loop ---
         function animate() {
             requestAnimationFrame(animate);
-
             if (!isCrashed) {
-                // Movement Logic
-                let braking = false;
-                if (activeKeys.has('w')) speed += 0.003;
-                else if (activeKeys.has('s')) { speed -= 0.01; braking = true; }
-                else speed -= 0.001;
-
-                speed = Math.max(0, Math.min(speed, 0.2));
-                
-                // Brake Lights Logic
-                player.userData.brakeLights.forEach(l => l.material.color.setHex(braking ? 0xff0000 : 0x550000));
-
-                // Steering & Indicators
-                let targetRot = 0;
-                player.userData.indicators.left.visible = false;
-                player.userData.indicators.right.visible = false;
-                player.userData.dashIndicators.left.visible = false;
-                player.userData.dashIndicators.right.visible = false;
-
-                if (activeKeys.has('a')) { 
-                    player.position.x -= 0.15; targetRot = 0.2; 
-                    let blink = (Math.floor(Date.now()/300) % 2 === 0);
-                    player.userData.indicators.left.visible = blink;
-                    player.userData.dashIndicators.left.visible = blink;
-                }
-                if (activeKeys.has('d')) { 
-                    player.position.x += 0.15; targetRot = -0.2; 
-                    let blink = (Math.floor(Date.now()/300) % 2 === 0);
-                    player.userData.indicators.right.visible = blink;
-                    player.userData.dashIndicators.right.visible = blink;
-                }
-                
-                player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, targetRot, 0.1);
+                updateJoystick();
+                speed = Math.max(0, Math.min(speed, 0.25));
                 player.position.x = THREE.MathUtils.clamp(player.position.x, -9, 9);
-            } else {
-                // Crash Physics
-                speed *= 0.95; // Decelerate world
-                
-                // Player physics
-                player.position.add(pVelocity);
-                player.rotation.x += pAngularVel.x;
-                player.rotation.y += pAngularVel.y;
-                player.rotation.z += pAngularVel.z;
-                pVelocity.y -= 0.015; // Gravity
-                if (player.position.y < 0) { 
-                    player.position.y = 0; 
-                    pVelocity.y *= -0.5; // Bounce
-                    pVelocity.x *= 0.9;
-                    pVelocity.z *= 0.9;
-                    pAngularVel.multiplyScalar(0.9);
-                }
-
-                // NPC physics
-                if (crashedNPC) {
-                    crashedNPC.position.add(npcVelocity);
-                    crashedNPC.rotation.x += npcAngularVel.x;
-                    crashedNPC.rotation.y += npcAngularVel.y;
-                    crashedNPC.rotation.z += npcAngularVel.z;
-                    npcVelocity.y -= 0.015;
-                    if (crashedNPC.position.y < 0) { 
-                        crashedNPC.position.y = 0; 
-                        npcVelocity.y *= -0.5; 
-                        npcVelocity.x *= 0.9;
-                        npcVelocity.z *= 0.9;
-                        npcAngularVel.multiplyScalar(0.9);
-                    }
-                }
+                distance += speed;
             }
 
-            // --- Camera Update Logic ---
-            if (!isDragging) {
-                dragOffX = THREE.MathUtils.lerp(dragOffX, 0, 0.05); // Slowly snap back if not dragging
-                dragOffY = THREE.MathUtils.lerp(dragOffY, 0, 0.05);
-            }
-
-            const preset = cameraPresets[camIndex];
-            
-            // Calculate how much the camera should follow the player's X position
-            let followFactor = (camIndex === 1) ? 1.0 : (camIndex === 2 ? 0.9 : 0.6); 
-            let baseX = player.position.x * followFactor;
-
-            // Base Target positions
-            let targetPos = new THREE.Vector3(baseX + preset.pos.x, preset.pos.y, preset.pos.z);
-            let targetLook = new THREE.Vector3(baseX + preset.look.x, preset.look.y, preset.look.z);
-
-            // Apply drag offsets based on camera mode
-            if (camIndex === 1) { // First person: move look target
-                targetLook.x -= dragOffX * 15;
-                targetLook.y += dragOffY * 15;
-            } else { // Third person / Others: orbit position
-                targetPos.x -= dragOffX * 15;
-                targetPos.y += dragOffY * 10;
-                if(targetPos.y < 1.5) targetPos.y = 1.5; // Prevent clipping underground
-            }
-
-            // Smoothly interpolate position and look target
-            camera.position.lerp(targetPos, 0.1);
-            currentLookTarget.lerp(targetLook, 0.15);
-            camera.lookAt(currentLookTarget);
-            // ---------------------------
-
-            // World movement (Simulating forward motion)
+            // World Scrolling
             const step = speed * 15;
             laneLines.forEach(l => { l.position.z += step; if(l.position.z > 30) l.position.z = -500; });
-            trees.forEach(t => { t.position.z += step; if(t.position.z > 30) t.position.z = -500; });
             
-            // NPCs & Collision
+            // Collision & NPCs
             npcs.forEach(npc => {
-                if (isCrashed && npc === crashedNPC) return; // Physics handles this one now
-                
                 npc.position.z += step - 0.8;
-                if(npc.position.z > 30) { npc.position.z = -300; npc.position.x = (Math.random()-0.5) * 16; }
+                if(npc.position.z > 30) { npc.position.z = -300; npc.position.x = (Math.random()-0.5)*16; }
 
-                const dx = Math.abs(player.position.x - npc.position.x);
-                const dz = Math.abs(player.position.z - npc.position.z);
-                if (dx < 2.2 && dz < 4.5 && !isCrashed) {
+                if (Math.abs(player.position.x - npc.position.x) < 2.2 && Math.abs(player.position.z - npc.position.z) < 4.5 && !isCrashed) {
                     isCrashed = true;
-                    crashedNPC = npc;
-                    
-                    // Initial crash impulse - adjusted to fly FORWARD realistically
-                    pVelocity.set((Math.random() - 0.5) * 0.8, 0.6, -1.0 - speed * 5);
-                    pAngularVel.set(Math.random() * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
-                    
-                    // NPC flies backward or sideways
-                    npcVelocity.set((Math.random() - 0.5) * 0.8, 0.5, 1.0 + speed * 2);
-                    npcAngularVel.set(Math.random() * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
-
-                    // Show restart screen after a dramatic delay
-                    setTimeout(() => {
-                        document.getElementById('restart-screen').style.display = 'flex';
-                        document.getElementById('final-score').innerText = "Distance Covered: " + Math.floor(distance) + "m";
-                    }, 3000); // 3 seconds of crashing!
+                    document.getElementById('restart-screen').style.display = 'flex';
                 }
             });
 
-            if (!isCrashed) distance += speed;
             document.getElementById('score').innerText = Math.floor(distance) + " m";
             renderer.render(scene, camera);
         }
 
-        // Start when everything is ready
-        window.onload = function() {
-            animate();
-        };
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
